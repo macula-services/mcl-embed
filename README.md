@@ -18,7 +18,7 @@ Two build modes, selected by the `real-embed` cargo feature:
 
 | Mode | Feature | Backend | Used by |
 |------|---------|---------|---------|
-| **real** | `real-embed` | `fastembed` ONNX (`multilingual-e5-small`) | release containers (`hecate-embed`, `hecate-embedder`, `hecate-spartan`) |
+| **real** | `real-embed` | `fastembed` ONNX (`multilingual-e5-small`) | `hecate-embedder`'s release container |
 | **stub** | default (off) | deterministic hash (FNV-1a + splitmix64), L2-normalised 384-dim | library CI / consumer eunit — wiring tests, no ONNX, no download |
 
 The stub returns stable per-input vectors so the rest of the stack integrates
@@ -32,9 +32,9 @@ shipped. The NIF is a pure embedder — model-specific conventions (e5's
 - Multilingual default (NL / FR / DE / IT / EN) — matches the
   "Europe, not US" anchor
 - BEAM-native: Rustler NIF, no sidecar, no IPC tax
-- Pairs with [`hecate-vector`](https://codeberg.org/hecate-social/hecate-vector)
-  for end-to-end RAG inside the Hecate daemon, and is served on the Macula mesh
-  by [`hecate-embedder`](https://codeberg.org/hecate-services/hecate-embedder)
+- A pure library, no release of its own — served on the Macula mesh by
+  [`hecate-embedder`](https://github.com/hecate-services/hecate-embedder),
+  the only consumer
 
 ## Public API
 

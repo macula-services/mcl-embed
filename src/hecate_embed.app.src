@@ -14,21 +14,14 @@
         {default_model_id, <<"intfloat/multilingual-e5-small">>},
         {default_dim, 384},
         {model_dir, "priv/models"},
-        %% Backend for the default model: nif (in-process ONNX), ollama (HTTP to
-        %% an Ollama daemon), or remote (HTTP to a hecate_embed SERVICE, i.e. this
-        %% app run in service mode elsewhere). A consumer that shares a per-node
-        %% embedder sets {backend, remote} + remote_url.
+        %% Backend for the default model: nif (in-process ONNX) or ollama (HTTP
+        %% to an Ollama daemon).
         {backend, nif},
-        {ollama_url, "http://127.0.0.1:11434/api/embeddings"},
-        {remote_url, "http://127.0.0.1:8477"},
-        %% Service mode: when set, the app starts an HTTP embedding service on
-        %% this port (POST /embed, /embed_batch; GET /health). Unset => library
-        %% only, no listener.
-        {http_port, undefined}
+        {ollama_url, "http://127.0.0.1:11434/api/embeddings"}
     ]},
     {modules, []},
     {licenses, ["Apache-2.0"]},
     {links, [
-        {"Codeberg", "https://codeberg.org/hecate-social/hecate-embed"}
+        {"GitHub", "https://github.com/hecate-services/hecate-embed"}
     ]}
 ]}.

@@ -1,8 +1,0 @@
-## The embedding service is a standalone node (no clustering); a short name and
-## a fixed cookie are enough. RELX_REPLACE_OS_VARS leaves this as-is (no ${}).
--sname hecate_embed
--setcookie hecate_embed
-
-## Embedding runs on dirty schedulers; keep the normal schedulers responsive.
-+K true
-+A 8

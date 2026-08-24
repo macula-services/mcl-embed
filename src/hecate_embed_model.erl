@@ -11,6 +11,11 @@
 %%%
 %%% Backend is set per-model via `Opts#{backend => nif | ollama}'.
 %%% Defaults to the `backend' env (which defaults to `nif').
+%%%
+%%% (A third backend, `remote' — HTTP to a hecate_embed instance run as its
+%%% own service — existed and was removed: it had no callers anywhere in the
+%%% workspace, and the topology that would have justified it doesn't occur —
+%%% see hecate-embed CHANGELOG.)
 -module(hecate_embed_model).
 -behaviour(gen_server).
 
@@ -32,10 +37,9 @@
     name       :: atom(),
     model_id   :: binary(),
     dim        :: pos_integer(),
-    backend    :: nif | ollama | remote,
+    backend    :: nif | ollama,
     handle     :: reference() | undefined,
-    ollama_url :: string() | undefined,
-    remote_url :: string() | undefined
+    ollama_url :: string() | undefined
 }).
 
 start_link(Name, Opts) when is_atom(Name), is_map(Opts) ->
@@ -62,11 +66,6 @@ init_backend(ollama, Name, ModelId, Dim, Opts) ->
     Url = maps:get(ollama_url, Opts, default_ollama_url()),
     {ok, #state{name = Name, model_id = ModelId, dim = Dim,
                 backend = ollama, ollama_url = Url}};
-init_backend(remote, Name, ModelId, Dim, Opts) ->
-    ok = ensure_inets(),
-    Url = maps:get(remote_url, Opts, default_remote_url()),
-    {ok, #state{name = Name, model_id = ModelId, dim = Dim,
-                backend = remote, remote_url = Url}};
 init_backend(nif, Name, ModelId, Dim, Opts) ->
     ModelDir = maps:get(model_dir, Opts, default_model_dir()),
     init_nif_loaded(hecate_embed_nif:load(ModelId, Dim, to_binary(ModelDir)),
@@ -82,8 +81,6 @@ handle_call({embed, Text}, _From, #state{backend = nif, handle = H} = S) ->
     {reply, hecate_embed_nif:embed(H, Text), S};
 handle_call({embed, Text}, _From, #state{backend = ollama} = S) ->
     {reply, ollama_embed(S, Text), S};
-handle_call({embed, Text}, _From, #state{backend = remote} = S) ->
-    {reply, remote_embed(S, Text), S};
 
 %% Asymmetric retrieval: e5-family models need the query text and the stored
 %% passages embedded with different instruction prefixes. Apply the prefix, then
@@ -97,8 +94,6 @@ handle_call({embed_many, Texts}, _From, #state{backend = nif, handle = H} = S) -
     {reply, hecate_embed_nif:embed_many(H, Texts), S};
 handle_call({embed_many, Texts}, _From, #state{backend = ollama} = S) ->
     {reply, ollama_embed_many(S, Texts), S};
-handle_call({embed_many, Texts}, _From, #state{backend = remote} = S) ->
-    {reply, remote_embed_many(S, Texts), S};
 
 handle_call(dim, _From, #state{dim = D} = S) ->
     {reply, D, S};
@@ -134,9 +129,6 @@ default_backend() ->
 
 default_ollama_url() ->
     application:get_env(hecate_embed, ollama_url, "http://127.0.0.1:11434/api/embeddings").
-
-default_remote_url() ->
-    application:get_env(hecate_embed, remote_url, "http://127.0.0.1:8477").
 
 %% The NIF's model_id and model_dir are rustler `String`s, which decode from an
 %% Erlang binary (not a charlist). Everything handed to the NIF must be binary.
@@ -214,43 +206,3 @@ truncate(B) when is_binary(B), byte_size(B) > 200 ->
     <<Head:200/binary, _/binary>> = B,
     Head;
 truncate(B) -> B.
-
-%%% Internals — remote backend (HTTP to a hecate_embed service)
-
--spec remote_embed(#state{}, binary()) -> {ok, [float()]} | {error, term()}.
-remote_embed(#state{remote_url = Url}, Text) when is_binary(Text) ->
-    Body = iolist_to_binary(json:encode(#{<<"text">> => Text})),
-    Request = {Url ++ "/embed", [], "application/json", Body},
-    remote_call(Request, 60_000, fun decode_vector/1).
-
--spec remote_embed_many(#state{}, [binary()]) -> {ok, [[float()]]} | {error, term()}.
-remote_embed_many(#state{remote_url = Url}, Texts) when is_list(Texts) ->
-    Body = iolist_to_binary(json:encode(#{<<"texts">> => Texts})),
-    Request = {Url ++ "/embed_batch", [], "application/json", Body},
-    remote_call(Request, 120_000, fun decode_vectors/1).
-
-remote_call(Request, Timeout, Decode) ->
-    case httpc:request(post, Request, [{timeout, Timeout}], [{body_format, binary}]) of
-        {ok, {{_, 200, _}, _Headers, RespBody}} ->
-            Decode(RespBody);
-        {ok, {{_, Code, _Reason}, _Headers, RespBody}} ->
-            {error, {http_status, Code, truncate(RespBody)}};
-        {error, Reason} ->
-            {error, {http_error, Reason}}
-    end.
-
-decode_vector(RespBody) ->
-    try json:decode(RespBody) of
-        #{<<"vector">> := Vec} when is_list(Vec) -> {ok, Vec};
-        Other                                    -> {error, {malformed_response, Other}}
-    catch
-        Class:Reason -> {error, {decode_failed, Class, Reason}}
-    end.
-
-decode_vectors(RespBody) ->
-    try json:decode(RespBody) of
-        #{<<"vectors">> := Vecs} when is_list(Vecs) -> {ok, Vecs};
-        Other                                       -> {error, {malformed_response, Other}}
-    catch
-        Class:Reason -> {error, {decode_failed, Class, Reason}}
-    end.

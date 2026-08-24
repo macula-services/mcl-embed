@@ -47,15 +47,18 @@ across the batch.
 {ok, V}    = hecate_embed:embed(BigM, <<"text">>).
 ```
 
-## Combining with hecate_vector
+## Combining with a vector index
+
+`hecate_vector` (the earlier in-BEAM ANN index this guide used to pair with)
+is archived: it never grew past brute-force scan and nothing in the workspace
+depends on it anymore. For storing and searching the vectors this library
+produces, use [`barrel`](https://github.com/beam-campus/barrel)'s
+`barrel_vectordb` (real HNSW/DiskANN) instead — that's what `hecate-rag`
+switched to.
 
 ```erlang
-{ok, M}   = hecate_embed:default_model().
-{ok, Idx} = hecate_vector:open(my_corpus, #{dim => hecate_embed:dim(M)}).
-
-{ok, V}   = hecate_embed:embed(M, <<"the dossier moves through desks">>),
-ok        = hecate_vector:add(Idx, <<"chunk:001">>, V).
-
-{ok, Q}    = hecate_embed:embed(M, <<"how do dossiers travel?">>),
-{ok, Hits} = hecate_vector:search(Idx, Q, 5).
+{ok, M} = hecate_embed:default_model().
+{ok, V} = hecate_embed:embed(M, <<"the dossier moves through desks">>).
+%% hand V to barrel_vectordb (or let barrel's own embedding policy compute
+%% it for you, see barrel's docs) — see barrel/docs/guides/ for the API.
 ```

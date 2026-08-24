@@ -21,4 +21,4 @@ The Rust NIF builds out of `native/hecate_embed_nif/`. You need:
 
 ## Reporting issues
 
-https://codeberg.org/hecate-social/hecate-embed/issues
+https://github.com/hecate-services/hecate-embed/issues
