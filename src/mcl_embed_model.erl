@@ -12,11 +12,11 @@
 %%% Backend is set per-model via `Opts#{backend => nif | ollama}'.
 %%% Defaults to the `backend' env (which defaults to `nif').
 %%%
-%%% (A third backend, `remote' — HTTP to a hecate_embed instance run as its
+%%% (A third backend, `remote' — HTTP to a mcl_embed instance run as its
 %%% own service — existed and was removed: it had no callers anywhere in the
 %%% workspace, and the topology that would have justified it doesn't occur —
-%%% see hecate-embed CHANGELOG.)
--module(hecate_embed_model).
+%%% see mcl-embed CHANGELOG.)
+-module(mcl_embed_model).
 -behaviour(gen_server).
 
 -export([
@@ -68,7 +68,7 @@ init_backend(ollama, Name, ModelId, Dim, Opts) ->
                 backend = ollama, ollama_url = Url}};
 init_backend(nif, Name, ModelId, Dim, Opts) ->
     ModelDir = maps:get(model_dir, Opts, default_model_dir()),
-    init_nif_loaded(hecate_embed_nif:load(ModelId, Dim, to_binary(ModelDir)),
+    init_nif_loaded(mcl_embed_nif:load(ModelId, Dim, to_binary(ModelDir)),
                     Name, ModelId, Dim).
 
 init_nif_loaded({ok, Handle}, Name, ModelId, Dim) ->
@@ -78,7 +78,7 @@ init_nif_loaded({error, Reason}, _Name, _ModelId, _Dim) ->
     {stop, {load_failed, Reason}}.
 
 handle_call({embed, Text}, _From, #state{backend = nif, handle = H} = S) ->
-    {reply, hecate_embed_nif:embed(H, Text), S};
+    {reply, mcl_embed_nif:embed(H, Text), S};
 handle_call({embed, Text}, _From, #state{backend = ollama} = S) ->
     {reply, ollama_embed(S, Text), S};
 
@@ -91,7 +91,7 @@ handle_call({embed_passage, Text}, From, #state{model_id = M} = S) ->
     handle_call({embed, prepend(passage_prefix(M), Text)}, From, S);
 
 handle_call({embed_many, Texts}, _From, #state{backend = nif, handle = H} = S) ->
-    {reply, hecate_embed_nif:embed_many(H, Texts), S};
+    {reply, mcl_embed_nif:embed_many(H, Texts), S};
 handle_call({embed_many, Texts}, _From, #state{backend = ollama} = S) ->
     {reply, ollama_embed_many(S, Texts), S};
 
@@ -111,26 +111,26 @@ terminate(_, _) -> ok.
 %%% Internals — env
 
 default_model_id() ->
-    application:get_env(hecate_embed, default_model_id, <<"intfloat/multilingual-e5-small">>).
+    application:get_env(mcl_embed, default_model_id, <<"intfloat/multilingual-e5-small">>).
 
 default_dim() ->
-    application:get_env(hecate_embed, default_dim, 384).
+    application:get_env(mcl_embed, default_dim, 384).
 
-%% Prefer the environment (HECATE_EMBED_MODEL_DIR) so the service configures the
+%% Prefer the environment (MCL_EMBED_MODEL_DIR) so the service configures the
 %% baked model path without RELX_REPLACE_OS_VARS; fall back to the app-env.
 default_model_dir() ->
-    case os:getenv("HECATE_EMBED_MODEL_DIR") of
+    case os:getenv("MCL_EMBED_MODEL_DIR") of
         Dir when is_list(Dir), Dir =/= "" -> Dir;
-        _Unset -> application:get_env(hecate_embed, model_dir, "priv/models")
+        _Unset -> application:get_env(mcl_embed, model_dir, "priv/models")
     end.
 
 default_backend() ->
-    application:get_env(hecate_embed, backend, nif).
+    application:get_env(mcl_embed, backend, nif).
 
 default_ollama_url() ->
-    application:get_env(hecate_embed, ollama_url, "http://127.0.0.1:11434/api/embeddings").
+    application:get_env(mcl_embed, ollama_url, "http://127.0.0.1:11434/api/embeddings").
 
-%% The NIF's model_id and model_dir are rustler `String`s, which decode from an
+%% The NIF's model_id and model_dir are rustler `String's, which decode from an
 %% Erlang binary (not a charlist). Everything handed to the NIF must be binary.
 to_binary(B) when is_binary(B) -> B;
 to_binary(L) when is_list(L)   -> list_to_binary(L).
@@ -156,7 +156,7 @@ prepend(Prefix, Text) -> <<Prefix/binary, Text/binary>>.
 
 %% inets must be up before httpc can do anything. The app's `applications'
 %% list already includes it, so this is belt+braces for tests/scripts that
-%% start the model gen_server directly without booting hecate_embed.
+%% start the model gen_server directly without booting mcl_embed.
 ensure_inets() ->
     case application:ensure_all_started(inets) of
         {ok, _} -> ok;

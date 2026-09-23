@@ -1,5 +1,5 @@
 %%% @doc Dynamic supervisor for loaded models.
--module(hecate_embed_model_sup).
+-module(mcl_embed_model_sup).
 -behaviour(supervisor).
 
 -export([start_link/0, start_model/2]).
@@ -19,12 +19,12 @@ init([]) ->
     },
     Children = [
         #{
-            id       => hecate_embed_model,
-            start    => {hecate_embed_model, start_link, []},
+            id       => mcl_embed_model,
+            start    => {mcl_embed_model, start_link, []},
             restart  => transient,
             shutdown => 5000,
             type     => worker,
-            modules  => [hecate_embed_model]
+            modules  => [mcl_embed_model]
         }
     ],
     {ok, {SupFlags, Children}}.

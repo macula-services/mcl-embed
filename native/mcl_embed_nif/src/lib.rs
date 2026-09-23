@@ -1,6 +1,6 @@
-//! hecate_embed_nif
+//! mcl_embed_nif
 //!
-//! Rustler NIF backing `hecate_embed`. Two build modes, selected by the
+//! Rustler NIF backing `mcl_embed`. Two build modes, selected by the
 //! `real-embed` cargo feature:
 //!
 //!   default        — a deterministic hash stub (FNV-1a + splitmix64) that
@@ -9,7 +9,7 @@
 //!                    in no ONNX runtime so library CI stays fast.
 //!
 //!   real-embed     — genuine sentence embeddings via `fastembed` (ONNX). The
-//!                    consumer (hecate-spartan) builds with this feature on.
+//!                    consumer (mcl-embedder) builds with this feature on.
 //!
 //! Both modes present the same NIF surface: `load/3`, `embed/2`, `embed_many/2`.
 //! Inference runs on a DirtyCpu scheduler so a multi-millisecond embed never
@@ -150,13 +150,10 @@ fn embed_many<'a>(env: Env<'a>, handle: ResourceArc<ModelResource>, texts: Vec<B
     }
 }
 
+impl rustler::Resource for ModelResource {}
+
 fn on_load(env: Env, _info: Term) -> bool {
-    rustler::resource!(ModelResource, env);
-    true
+    env.register::<ModelResource>().is_ok()
 }
 
-rustler::init!(
-    "hecate_embed_nif",
-    [load, embed, embed_many],
-    load = on_load
-);
+rustler::init!("mcl_embed_nif", load = on_load);

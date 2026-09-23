@@ -1,9 +1,9 @@
-%%% @doc hecate_embed public facade.
+%%% @doc mcl_embed public facade.
 %%%
 %%% Load one or more named embedding models, compute sentence
-%%% embeddings, return as `[float()]`. Models are gen_servers
+%%% embeddings, return as `[float()]'. Models are gen_servers
 %%% wrapping a Rustler NIF resource (ONNX session).
--module(hecate_embed).
+-module(mcl_embed).
 
 -export([
     load_model/2,
@@ -32,14 +32,14 @@
 -spec load_model(atom(), map()) -> {ok, model()} | {error, term()}.
 load_model(Name, Opts) when is_atom(Name), is_map(Opts) ->
     case whereis(Name) of
-        undefined -> hecate_embed_model_sup:start_model(Name, Opts);
+        undefined -> mcl_embed_model_sup:start_model(Name, Opts);
         Pid       -> {ok, Pid}
     end.
 
 -spec unload_model(model()) -> ok.
-unload_model(M) -> hecate_embed_model:stop(M).
+unload_model(M) -> mcl_embed_model:stop(M).
 
-%% @doc Lazy default — loads `default` on first call.
+%% @doc Lazy default — loads `default' on first call.
 -spec default_model() -> {ok, model()}.
 default_model() -> load_model(default, #{}).
 
@@ -51,26 +51,26 @@ embed(Text) when is_binary(Text) ->
 
 -spec embed(model(), binary()) -> {ok, vector()} | {error, term()}.
 embed(Model, Text) when is_binary(Text) ->
-    hecate_embed_model:embed(Model, Text).
+    mcl_embed_model:embed(Model, Text).
 
 %% @doc Embed search text (adds the model's query instruction prefix, e.g. e5's
 %% "query: "). Use for the recall side of asymmetric retrieval.
 -spec embed_query(model(), binary()) -> {ok, vector()} | {error, term()}.
 embed_query(Model, Text) when is_binary(Text) ->
-    hecate_embed_model:embed_query(Model, Text).
+    mcl_embed_model:embed_query(Model, Text).
 
 %% @doc Embed a stored document (adds the model's passage instruction prefix,
 %% e.g. e5's "passage: "). Use for the store side of asymmetric retrieval.
 -spec embed_passage(model(), binary()) -> {ok, vector()} | {error, term()}.
 embed_passage(Model, Text) when is_binary(Text) ->
-    hecate_embed_model:embed_passage(Model, Text).
+    mcl_embed_model:embed_passage(Model, Text).
 
 -spec embed_many(model(), [binary()]) -> {ok, [vector()]} | {error, term()}.
 embed_many(Model, Texts) when is_list(Texts) ->
-    hecate_embed_model:embed_many(Model, Texts).
+    mcl_embed_model:embed_many(Model, Texts).
 
 -spec dim(model()) -> pos_integer().
-dim(Model) -> hecate_embed_model:dim(Model).
+dim(Model) -> mcl_embed_model:dim(Model).
 
 -spec model_id(model()) -> binary().
-model_id(Model) -> hecate_embed_model:model_id(Model).
+model_id(Model) -> mcl_embed_model:model_id(Model).

@@ -1,5 +1,5 @@
-%%% @doc Top-level supervisor for hecate_embed.
--module(hecate_embed_sup).
+%%% @doc Top-level supervisor for mcl_embed.
+-module(mcl_embed_sup).
 -behaviour(supervisor).
 
 -export([start_link/0]).
@@ -19,10 +19,10 @@ init([]) ->
 
 model_sup_child() ->
     #{
-        id       => hecate_embed_model_sup,
-        start    => {hecate_embed_model_sup, start_link, []},
+        id       => mcl_embed_model_sup,
+        start    => {mcl_embed_model_sup, start_link, []},
         restart  => permanent,
         shutdown => 5000,
         type     => supervisor,
-        modules  => [hecate_embed_model_sup]
+        modules  => [mcl_embed_model_sup]
     }.

@@ -1,6 +1,6 @@
-# hecate_embed_nif
+# mcl_embed_nif
 
-Rustler NIF crate backing the `hecate_embed` Erlang library.
+Rustler NIF crate backing the `mcl_embed` Erlang library.
 
 This scaffold ships a **deterministic hash-based stub** — every input
 text produces a stable, unit-norm `dim`-element vector. Useless for

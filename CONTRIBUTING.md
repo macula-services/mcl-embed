@@ -9,7 +9,7 @@ rebar3 compile
 rebar3 ct
 ```
 
-The Rust NIF builds out of `native/hecate_embed_nif/`. You need:
+The Rust NIF builds out of `native/mcl_embed_nif/`. You need:
 - Erlang/OTP 26+
 - Rust 1.70+ (stable)
 
@@ -21,4 +21,4 @@ The Rust NIF builds out of `native/hecate_embed_nif/`. You need:
 
 ## Reporting issues
 
-https://github.com/hecate-services/hecate-embed/issues
+https://github.com/macula-services/mcl-embed/issues

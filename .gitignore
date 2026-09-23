@@ -24,3 +24,4 @@ priv/models/tokenizer.json
 .DS_Store
 mix.lock
 rebar.lock
+doc/

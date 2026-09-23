@@ -13,5 +13,5 @@ MODELS="$ROOT/priv/models"
 mkdir -p "$MODELS"
 
 echo "TODO: fetch intfloat/multilingual-e5-small ONNX bundle into $MODELS"
-echo "Until fastembed-rs is wired in, hecate_embed runs the deterministic"
+echo "Until fastembed-rs is wired in, mcl_embed runs the deterministic"
 echo "stub embedder, which needs no model files."

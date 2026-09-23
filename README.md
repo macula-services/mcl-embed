@@ -1,6 +1,6 @@
-# hecate-embed
+# mcl-embed
 
-Local, multilingual sentence embedder for the Hecate ecosystem.
+Local, multilingual sentence embedder for the BEAM, as a Rust NIF.
 
 A thin Erlang/OTP wrapper around a Rust embedder
 ([`fastembed`](https://github.com/Anush008/fastembed-rs) running ONNX models
@@ -18,7 +18,7 @@ Two build modes, selected by the `real-embed` cargo feature:
 
 | Mode | Feature | Backend | Used by |
 |------|---------|---------|---------|
-| **real** | `real-embed` | `fastembed` ONNX (`multilingual-e5-small`) | `hecate-embedder`'s release container |
+| **real** | `real-embed` | `fastembed` ONNX (`multilingual-e5-small`) | `mcl-embedder`'s release container |
 | **stub** | default (off) | deterministic hash (FNV-1a + splitmix64), L2-normalised 384-dim | library CI / consumer eunit — wiring tests, no ONNX, no download |
 
 The stub returns stable per-input vectors so the rest of the stack integrates
@@ -33,24 +33,24 @@ shipped. The NIF is a pure embedder — model-specific conventions (e5's
   "Europe, not US" anchor
 - BEAM-native: Rustler NIF, no sidecar, no IPC tax
 - A pure library, no release of its own — served on the Macula mesh by
-  [`hecate-embedder`](https://github.com/hecate-services/hecate-embedder),
+  [`mcl-embedder`](https://github.com/macula-services/mcl-embedder),
   the only consumer
 
 ## Public API
 
 ```erlang
-{ok, Model} = hecate_embed:load_model(default, #{}).
-{ok, Vec}   = hecate_embed:embed(Model, <<"the dossier moves through desks">>).
-{ok, Vecs}  = hecate_embed:embed_many(Model, [<<"text1">>, <<"text2">>]).
-Dim         = hecate_embed:dim(Model).  %% 384 by default
+{ok, Model} = mcl_embed:load_model(default, #{}).
+{ok, Vec}   = mcl_embed:embed(Model, <<"the dossier moves through desks">>).
+{ok, Vecs}  = mcl_embed:embed_many(Model, [<<"text1">>, <<"text2">>]).
+Dim         = mcl_embed:dim(Model).  %% 384 by default
 ```
 
 For asymmetric retrieval (e5 and similar), embed the stored side and the search
 side differently — the facade applies the model's instruction prefix for you:
 
 ```erlang
-{ok, PVec} = hecate_embed:embed_passage(Model, <<"rotate the leaked credential">>).
-{ok, QVec} = hecate_embed:embed_query(Model, <<"what do I do about a leak?">>).
+{ok, PVec} = mcl_embed:embed_passage(Model, <<"rotate the leaked credential">>).
+{ok, QVec} = mcl_embed:embed_query(Model, <<"what do I do about a leak?">>).
 ```
 
 Vectors are lists of floats, length = `dim/1`. `embed/2` is safe to
@@ -70,28 +70,55 @@ Supported model ids (`resolve_model` in the NIF):
 | `intfloat/multilingual-e5-small` | 384 |
 | `sentence-transformers/all-MiniLM-L6-v2` | 384 |
 
+## Requirements
+
+⚠ **The real backend needs a CPU with AVX2.** The ONNX Runtime that
+`fastembed` links is built for AVX2, and on a CPU without it (the Celeron J4105
+nodes, for example) the NIF dies with SIGILL the first time a model runs, taking
+the node with it. The stub backend runs anywhere. Run the real one on an AVX2
+host and reach it over the mesh, which is what `mcl-embedder` is for.
+
+Building needs a Rust toolchain (`cargo`); the NIF is compiled from source
+wherever this library is compiled.
+
+## Installation
+
+```erlang
+{deps, [{mcl_embed, "~> 0.1"}]}.
+```
+
+The NIF builds as part of compiling this dependency (its own `pre_hooks` run
+`scripts/build-nif.sh`), so a consumer adds nothing to its own hooks.
+
+- `CARGO_FEATURES=real-embed` in the build environment builds the real
+  `fastembed`/ONNX embedder.
+- Unset, it builds the deterministic hash stub: right shape, no meaning, for
+  tests.
+
+The real backend needs the model files at run time:
+`scripts/prefetch-model.sh` downloads the default model, and
+`MCL_EMBED_MODEL_DIR` points the library at them.
+
 ## Architecture
 
-```
-hecate_embed              ← public facade
-  └── hecate_embed_model  ← gen_server per loaded model
-        └── hecate_embed_nif ← Rustler NIF
-              └── native/hecate_embed_nif/  ← Rust crate (fastembed / hash stub)
-```
+| Module | Role |
+|---|---|
+| `mcl_embed` | the public facade |
+| `mcl_embed_model` | one gen_server per loaded model |
+| `mcl_embed_nif` | the Rustler NIF's Erlang side |
+| `native/mcl_embed_nif/` | the Rust crate: fastembed, or the hash stub |
 
-## Build
+## Build and test
 
 ```bash
-rebar3 compile                                # BEAM code
-scripts/build-nif.sh                          # builds the stub NIF (default)
-CARGO_FEATURES=real-embed scripts/build-nif.sh  # builds the real ONNX NIF
-scripts/prefetch-model.sh                     # downloads the default model (real-embed only)
-rebar3 ct                                     # Common Test suites
+rebar3 compile                                   # builds the stub NIF too
+CARGO_FEATURES=real-embed rebar3 compile         # builds the real ONNX NIF
+rebar3 ct                                        # Common Test suites
+rebar3 ex_doc                                    # docs
 ```
 
-The NIF is built by `scripts/build-nif.sh` (which calls `cargo` directly);
-`rustler`/`rebar3_cargo` are intentionally not rebar deps — they pull in
-mix-only transitives.
+`rustler` and `rebar3_cargo` are deliberately not rebar deps: they pull in
+mix-only transitives. `scripts/build-nif.sh` calls `cargo` directly.
 
 ## License
 

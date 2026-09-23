@@ -1,12 +1,12 @@
 [package]
-name    = "hecate_embed_nif"
+name    = "mcl_embed_nif"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Rustler NIF backing hecate_embed — local sentence embeddings"
+description = "Rustler NIF backing mcl_embed — local sentence embeddings"
 
 [lib]
-name       = "hecate_embed_nif"
+name       = "mcl_embed_nif"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -14,7 +14,7 @@ rustler = "0.34"
 
 # Real ONNX embedder, enabled by the `real-embed` feature. Off by default so
 # the library's own fast tests build the deterministic hash stub without pulling
-# ONNX Runtime; the consumer (hecate-spartan) builds with `--features real-embed`
+# ONNX Runtime; the consumer (mcl-embedder) builds with `--features real-embed`
 # for genuine multilingual embeddings.
 fastembed = { version = "5", optional = true }
 
