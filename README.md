@@ -120,6 +120,14 @@ rebar3 ex_doc                                    # docs
 `rustler` and `rebar3_cargo` are deliberately not rebar deps: they pull in
 mix-only transitives. `scripts/build-nif.sh` calls `cargo` directly.
 
+## Releasing
+
+A pushed `vX.Y.Z` tag is the release: `publish-hex.yml` refuses unless the
+checkout is exactly that clean tag with a CHANGELOG section, proves a consumer
+can build and load the NIF from the package alone, publishes, and checks that
+hex serves the tagged code. Bump `vsn` in `src/mcl_embed.app.src`, add the
+CHANGELOG section, let lint-and-test go green on main, then tag.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).

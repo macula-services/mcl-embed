@@ -1,0 +1,181 @@
+name: Publish to hex
+
+# Publishes exactly a pushed release tag to hex.pm. THE TAG IS THE RELEASE:
+# there is no reviewer step. The `hex-publish` environment holds HEX_API_KEY
+# and only lets a `v*.*.*` tag run the publish job.
+#
+# Tests gate the release commit on main (lint-and-test), not the publish. This
+# workflow checks that the checkout is the clean, pushed release tag, builds
+# the package and docs, proves a consumer can build and load the NIF from the
+# package alone, publishes, and checks that hex serves the tagged code.
+#
+# - A pushed tag vX.Y.Z runs `verify`, then `publish`.
+# - A manual dispatch is a dry run: it runs `verify` for the given tag and
+#   never publishes. GitHub only dispatches a workflow that is on the default
+#   branch.
+#
+# mcl_embed ships a Rust NIF that is compiled ON THE CONSUMER, by the app's own
+# pre_hooks, from the Rust crate the package carries. So `verify' needs a Rust
+# toolchain, and it compiles a throwaway consumer against the built tarball's
+# contents: a package that left out native/ or scripts/ builds here, publishes,
+# and then fails on every consumer.
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to dry-run, vX.Y.Z. Never publishes.'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  OTP_VERSION: '28.4.2'
+  REBAR3_VERSION: '3.27.0'
+  RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+
+concurrency:
+  group: publish-hex-${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Guard, build the package, and consume it
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # The guard comes from this workflow's own commit, so a dry run can
+      # check a tag cut before the guard existed. On a tag push this commit
+      # is the tag itself.
+      - name: Check out the workflow's own commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: ci
+
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          path: pkg
+
+      - name: Set up Erlang/OTP and rebar3
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+          version-type: strict
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Refuse unless this is the clean, pushed release tag
+        run: bash ci/scripts/is_checkout_publishable.sh "$GITHUB_WORKSPACE/pkg"
+
+      - name: Build the package and docs
+        working-directory: pkg
+        run: rebar3 hex build
+
+      # What a consumer gets is the tarball, not this checkout. Unpack it and
+      # compile a throwaway app against exactly its contents: that runs
+      # mcl_embed's own pre_hooks, builds the NIF from the shipped crate, and
+      # then loads it and embeds text (the deterministic stub build).
+      - name: Build and load the NIF from the package alone
+        run: |
+          set -euo pipefail
+          VSN="${RELEASE_TAG#v}"
+          TAR="$GITHUB_WORKSPACE/pkg/_build/default/lib/mcl_embed/hex/mcl_embed-${VSN}.tar"
+          WORK="$(mktemp -d)"
+          mkdir -p "$WORK/pkg" "$WORK/app/src" "$WORK/app/_checkouts/mcl_embed"
+          tar -xf "$TAR" -C "$WORK/pkg"
+          tar -xzf "$WORK/pkg/contents.tar.gz" -C "$WORK/app/_checkouts/mcl_embed"
+          cd "$WORK/app"
+          printf '{application, consumer, [{vsn,"0.1.0"},{applications,[kernel,stdlib,mcl_embed]},{modules,[]}]}.\n' > src/consumer.app.src
+          printf '{deps, [mcl_embed]}.\n' > rebar.config
+          rebar3 compile
+          ERL_LIBS=_build/default/lib:_build/default/checkouts erl -noshell -eval '
+            {ok, _} = application:ensure_all_started(mcl_embed),
+            {ok, M} = mcl_embed:default_model(),
+            {ok, V} = mcl_embed:embed(M, <<"hello">>),
+            384 = length(V),
+            io:format("consumer built the NIF from the package and embedded ~b dims~n", [length(V)]),
+            halt().'
+
+      # The publish job's command as a dry run, with a placeholder key. It
+      # fails here if the command does not read a key from HEX_API_KEY; it
+      # cannot tell whether the real key works. The dead API URL keeps the
+      # placeholder away from hex.pm.
+      - name: Dry-run the publish command
+        working-directory: pkg
+        env:
+          HEX_API_KEY: placeholder-not-a-real-key
+          HEX_API_URL: http://127.0.0.1:9
+        run: rebar3 hex publish --repo hexpm --yes --dry-run
+
+  publish:
+    name: Publish to hex.pm
+    needs: verify
+    # Only a pushed release tag publishes, whatever the triggers above say.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: hex-publish
+    steps:
+      - name: Refuse unless this run is a pushed release tag
+        run: |
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF" in
+            push:refs/tags/v*) ;;
+            *) echo "::error::publish runs only for a pushed release tag, not $GITHUB_EVENT_NAME $GITHUB_REF"
+               exit 1 ;;
+          esac
+
+      - name: Check out the release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Set up Erlang/OTP and rebar3
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          rebar3-version: ${{ env.REBAR3_VERSION }}
+          version-type: strict
+
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --default-toolchain stable --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Refuse unless this is the clean, pushed release tag
+        run: bash scripts/is_checkout_publishable.sh
+
+      # rebar3_hex reads HEX_API_KEY only for a named repository: without
+      # --repo it takes the default hexpm config, finds no write key and
+      # stops with "No write key found for user".
+      - name: Publish the package and docs
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: rebar3 hex publish --repo hexpm --yes
+
+      - name: Check that hex serves the tagged code
+        run: |
+          VSN="${RELEASE_TAG#v}"
+          for attempt in 1 2 3 4 5; do
+            if bash scripts/is_hex_serving_what_git_says.sh "$VSN" "$RELEASE_TAG"; then
+              exit 0
+            fi
+            echo "Attempt $attempt: not confirmed yet, retrying in 30 seconds"
+            sleep 30
+          done
+          echo "::error::hex.pm does not serve the code tagged $RELEASE_TAG"
+          exit 1
