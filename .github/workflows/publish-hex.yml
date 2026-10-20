@@ -4,12 +4,12 @@ name: Publish to hex
 # there is no reviewer step. The `hex-publish` environment holds HEX_API_KEY
 # and only lets a `v*.*.*` tag run the publish job.
 #
-# Tests gate the release commit on main (lint-and-test), not the publish. This
-# workflow checks that the checkout is the clean, pushed release tag, builds
+# This workflow checks that the checkout is the clean, pushed release tag, builds
 # the package and docs, proves a consumer can build and load the NIF from the
 # package alone, publishes, and checks that hex serves the tagged code.
 #
-# - A pushed tag vX.Y.Z runs `verify`, then `publish`.
+# - A pushed tag vX.Y.Z runs `verify` and `test`; `publish` runs once both
+#   are green. A red suite leaves the tag with no package (mcl-om#34).
 # - A manual dispatch is a dry run: it runs `verify` for the given tag and
 #   never publishes. GitHub only dispatches a workflow that is on the default
 #   branch.
@@ -120,9 +120,17 @@ jobs:
           HEX_API_URL: http://127.0.0.1:9
         run: rebar3 hex publish --repo hexpm --yes --dry-run
 
+  # The whole of lint.yml, on the tagged commit (a called workflow checks
+  # out the caller's github.sha, which on a tag push is the tag). A dispatch
+  # is a dry run of `verify' and skips it: it would test the branch, not the tag.
+  test:
+    name: Test the release commit
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/lint.yml
+
   publish:
     name: Publish to hex.pm
-    needs: verify
+    needs: [verify, test]
     # Only a pushed release tag publishes, whatever the triggers above say.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
