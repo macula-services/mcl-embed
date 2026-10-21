@@ -33,3 +33,12 @@ jobs:
       - run: rebar3 as lint lint
       - run: rebar3 ct
       - run: rebar3 ex_doc
+      # The crate's structural floor. clippy.toml sets the nesting, cognitive
+      # complexity and function-length limits and Cargo.toml's [lints.clippy]
+      # denies all three, so this step gates them; `-D warnings` makes any other
+      # clippy finding fatal too. `--profile minimal` installs rustc and cargo
+      # but not clippy, hence the component step.
+      - name: Install clippy for the pinned toolchain
+        run: rustup component add clippy
+      - run: cargo clippy --all-targets -- -D warnings
+        working-directory: native/mcl_embed_nif

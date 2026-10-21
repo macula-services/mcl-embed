@@ -21,3 +21,8 @@ fastembed = { version = "5", optional = true }
 [features]
 default = []
 real-embed = ["dep:fastembed"]
+
+[lints.clippy]
+excessive_nesting = "deny"
+cognitive_complexity = "deny"
+too_many_lines = "deny"
